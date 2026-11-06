@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>映画あらすじ年代クイズ</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @keyframes cardIn { from{opacity:0;transform:translateX(-15px)} to{opacity:1;transform:translateX(0)} }
+  .card-in { animation: cardIn 0.35s ease-out; }
+  .decade-btn { transition: all 0.15s; }
+  .decade-btn:hover { transform: scale(1.05); }
+  .decade-btn.correct { background: #166534 !important; border-color: #22c55e !important; box-shadow: 0 0 10px rgba(34,197,94,0.4); }
+  .decade-btn.wrong { background: #7f1d1d !important; border-color: #ef4444 !important; }
+  .decade-btn.reveal { background: #1e3a1e !important; border-color: #4ade80 !important; }
+</style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen">
+<div class="max-w-lg mx-auto p-4">
+  <header class="text-center py-4">
+    <h1 class="text-2xl font-bold bg-gradient-to-r from-amber-400 to-red-400 bg-clip-text text-transparent">映画あらすじ年代クイズ</h1>
+    <p class="text-gray-400 text-sm mt-1">あらすじから公開年代を当てよう</p>
+  </header>
+
+  <!-- Start screen -->
+  <div id="screen-start">
+    <div class="bg-gray-800 rounded-2xl p-6 mb-4 text-center">
+      <div class="text-5xl mb-3">🎬</div>
+      <div id="hs-display" class="text-yellow-400 text-sm mb-4"></div>
+      <p class="text-gray-300 text-sm mb-5">あらすじのヒントから映画の公開年代を当てる10問クイズ。ジャンルでフィルタできます。</p>
+
+      <div class="mb-4">
+        <p class="text-xs text-gray-400 mb-2">ジャンルフィルター</p>
+        <div class="flex flex-wrap gap-2 justify-center" id="genre-filters"></div>
+      </div>
+
+      <button onclick="startQuiz()" class="w-full bg-gradient-to-r from-amber-600 to-red-600 hover:from-amber-500 hover:to-red-500 text-white font-bold py-3 rounded-xl text-lg" aria-label="クイズを開始する">
+        クイズ開始！
+      </button>
+    </div>
+  </div>
+
+  <!-- Quiz screen -->
+  <div id="screen-quiz" class="hidden">
+    <div class="flex justify-between items-center mb-3">
+      <span id="q-counter" class="text-gray-400 text-sm"></span>
+      <span id="q-score" class="text-yellow-400 font-bold text-sm">0点</span>
+      <button onclick="showStart()" class="text-gray-500 text-xs hover:text-gray-300" aria-label="スタート画面に戻る">× やめる</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="flex gap-1 mb-4" id="q-dots"></div>
+
+    <!-- Question card -->
+    <div id="q-card" class="bg-gray-800 rounded-2xl p-5 mb-4 card-in">
+      <div class="flex justify-between items-center mb-3">
+        <span id="q-genre" class="text-xs font-bold px-2 py-1 rounded-full bg-gray-700 text-gray-300"></span>
+        <span id="q-hint-badge" class="text-xs text-amber-400 cursor-pointer hover:underline" onclick="toggleHint()">💡 ヒントを表示</span>
+      </div>
+      <p id="q-description" class="text-gray-100 leading-relaxed mb-3 text-base"></p>
+      <div id="q-hint-box" class="hidden text-xs text-amber-200 italic bg-amber-900 bg-opacity-30 rounded-lg p-2"></div>
+    </div>
+
+    <!-- Timeline buttons -->
+    <p class="text-xs text-gray-400 text-center mb-3">公開年代を選んでください</p>
+    <div class="grid grid-cols-7 gap-2 mb-4" id="decade-btns" role="group" aria-label="年代選択"></div>
+
+    <!-- Feedback -->
+    <div id="feedback-box" class="hidden rounded-xl p-4 mb-4">
+      <div id="fb-title" class="font-bold text-lg mb-1"></div>
+      <div id="fb-decade" class="text-sm mb-1 text-gray-300"></div>
+      <div id="fb-film" class="text-xs text-gray-400"></div>
+    </div>
+
+    <button id="next-btn" onclick="nextQuestion()" class="hidden w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-xl text-sm">次の問題 →</button>
+  </div>
+
+  <!-- Result screen -->
+  <div id="screen-result" class="hidden text-center">
+    <div class="bg-gray-800 rounded-2xl p-7">
+      <div id="r-icon" class="text-5xl mb-2"></div>
+      <h2 id="r-level" class="text-xl font-bold mb-1"></h2>
+      <div id="r-score" class="text-4xl font-bold text-amber-400 mb-2"></div>
+      <div id="r-sub" class="text-gray-400 text-sm mb-4"></div>
+      <div id="r-breakdown" class="text-sm text-left bg-gray-700 rounded-xl p-4 mb-4 space-y-2"></div>
+      <div id="r-hs" class="text-yellow-400 font-bold mb-3"></div>
+      <button onclick="showStart()" class="w-full bg-gradient-to-r from-amber-600 to-red-600 text-white font-bold py-3 rounded-xl">
+        もう一度プレイ
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DECADES = ['1960s','1970s','1980s','1990s','2000s','2010s','2020s'];
+const DECADE_COLORS = {
+  '1960s':'#6b21a8','1970s':'#9a3412','1980s':'#1e40af','1990s':'#065f46','2000s':'#92400e','2010s':'#1e3a5f','2020s':'#4a044e'
+};
+
+const MOVIES = [
+  { desc:'ローマ近郊の空き地で二人の若者が自転車を巡って翻弄される。戦後の貧困と父と子の絆を描いたネオリアリズモの名作。', decade:'1940s', genre:'ドラマ', hint:'自転車泥棒が重要なモチーフ', film:'自転車泥棒(1948)' },
+  { desc:'宇宙船が謎の信号を追跡し見知らぬ惑星に着陸。乗組員は次々と謎の生命体に遭遇し恐怖のサバイバルが始まる。', decade:'1970s', genre:'SF', hint:'「宇宙では誰もあなたの叫び声は聞こえない」', film:'エイリアン(1979)' },
+  { desc:'南北戦争を背景に一人の女性の波乱万丈な人生を描く。農園の没落から再興まで、強い意志で困難を乗り越える。', decade:'1930s', genre:'ドラマ', hint:'「明日は明日の風が吹く」', film:'風と共に去りぬ(1939)' },
+  { desc:'マフィアの一族が抗争と後継者問題に揺れる大河ドラマ。家族の絆と権力の腐敗が緻密に描かれる。', decade:'1970s', genre:'ドラマ', hint:'「断れない申し出」', film:'ゴッドファーザー(1972)' },
+  { desc:'宇宙の銀河系の端で反乱軍と帝国軍が壮大な戦いを繰り広げる。若き英雄がフォースと剣の使い手に成長する。', decade:'1970s', genre:'SF', hint:'「フォースと共にあれ」', film:'スター・ウォーズ(1977)' },
+  { desc:'白鯨を追って航海する船長の執念と船員たちの運命。大自然と人間の対比、強迫的な復讐心を描く。', decade:'1950s', genre:'ドラマ', hint:'「白鯨と呼んでくれ」は原作のセリフ', film:'白鯨(1956)' },
+  { desc:'未来から送られてきた殺人機械が現代の女性を執拗に追いかける。人間と機械の壮絶な逃走劇。', decade:'1980s', genre:'SF', hint:'「アイル・ビー・バック」', film:'ターミネーター(1984)' },
+  { desc:'一人のエージェントが謎の組織の陰謀を追う。現実と仮想現実の境界が揺らぐ中で真実を求める。', decade:'1990s', genre:'SF', hint:'「赤いピルか青いピルか」', film:'マトリックス(1999)' },
+  { desc:'宇宙開発黎明期にNASAを支えた三人の女性数学者の活躍。人種と性差別に立ち向かいながら夢に挑む実話。', decade:'2010s', genre:'ドラマ', hint:'「自分の力で扉を開ける」', film:'ドリーム(2016)' },
+  { desc:'廃墟となった近未来の地球で砂漠をひた走る女戦士。資源をめぐる狂気の独裁者との壮絶なチェイス。', decade:'2010s', genre:'アクション', hint:'「帰る場所がなければ前進するしかない」', film:'マッドマックス 怒りのデス・ロード(2015)' },
+  { desc:'東京の雑居ビルで中年男性が孤独に過ごす夜。若い女性との偶然の出会いから芽生える淡い感情。', decade:'2000s', genre:'ドラマ', hint:'「翻訳を失う何かがある」', film:'ロスト・イン・トランスレーション(2003)' },
+  { desc:'夢の中に侵入して他者の潜在意識を操る特殊工作員。多層構造の夢の中で任務を遂行する頭脳戦。', decade:'2010s', genre:'SF', hint:'コマが回り続けるラストシーン', film:'インセプション(2010)' },
+  { desc:'南米アマゾンの奥地で宇宙人との遭遇を試みる考古学者チーム。地球外知性との接触とコミュニケーションの謎。', decade:'2010s', genre:'SF', hint:'言語学者が主人公', film:'メッセージ(2016)' },
+  { desc:'高校生が友人たちと夏休みに連続殺人犯の死体を探す旅に出る。友情と喪失、少年期の終わりを描く青春譚。', decade:'1980s', genre:'ドラマ', hint:'スティーヴン・キング原作', film:'スタンド・バイ・ミー(1986)' },
+  { desc:'南極の研究基地に人間に擬態する未知の生物が侵入。誰が本物の仲間かわからない極限の疑心暗鬼と恐怖。', decade:'1980s', genre:'ホラー', hint:'「あれが何者かは誰にもわからない」', film:'遊星からの物体X(1982)' },
+  { desc:'パリのレストランの厨房に迷い込んだ料理好きのネズミが一流シェフになることを夢見る。食と夢をテーマにしたアニメ。', decade:'2000s', genre:'アニメ', hint:'「誰でも料理できる」', film:'レミーのおいしいレストラン(2007)' },
+  { desc:'高齢の発明家が自宅を風船で飛ばして冒険に出る。孫ほど年齢の違う少年と旅するロードムービー。', decade:'2000s', genre:'アニメ', hint:'カラフルな風船の家', film:'カールじいさんの空飛ぶ家(2009)' },
+  { desc:'一人の探偵が二重人格の凶悪犯を追い詰める心理戦。尋問シーンとどんでん返しが絶賛されたサスペンス。', decade:'1990s', genre:'サスペンス', hint:'「カイザー・ソゼとは誰か」', film:'ユージュアル・サスペクツ(1995)' },
+  { desc:'マーブル宇宙での神話的英雄たちが集結し宇宙規模の危機に立ち向かう。アベンジャーズの集大成的作品。', decade:'2010s', genre:'アクション', hint:'サノスの指パッチン', film:'アベンジャーズ インフィニティ・ウォー(2018)' },
+  { desc:'高校生がタイムマシンで30年前に戻り偶然に両親の出会いを邪魔してしまう。元の未来を取り戻す冒険コメディ。', decade:'1980s', genre:'SF', hint:'「1.21ジゴワット」', film:'バック・トゥ・ザ・フューチャー(1985)' },
+  { desc:'南太平洋の孤島に恐竜を蘇らせたテーマパーク。管理システムの暴走で恐竜が解き放たれ恐怖のサバイバル。', decade:'1990s', genre:'SF', hint:'「生命は…道を見つけ出す」', film:'ジュラシック・パーク(1993)' },
+  { desc:'キングダム・オブ・ハートで鍵と錠前をめぐる少年の旅。魔法使いの師匠から受け継いだ使命を果たすファンタジー。', decade:'2000s', genre:'アニメ', hint:'キングダムハーツではなく別作品', film:'ハウルの動く城(2004)' },
+  { desc:'伝説の剣士が息子の仇を追う旅を続ける老いたサムライ。厳しい雪景色の中でのラストの対決シーンが名高い。', decade:'1960s', genre:'アクション', hint:'黒澤明監督作品', film:'椿三十郎(1962)' },
+  { desc:'南米の麻薬カルテルの中で生き延びる元軍人。家族を守るため暗部の世界に深く足を踏み入れていく。', decade:'2010s', genre:'アクション', hint:'ドラッグ・カルテルとFBIの共演', film:'ボーダーライン(2015)' },
+  { desc:'宇宙飛行士が火星に一人取り残される。限られた資源で生き延びながら救助を待つサバイバル劇。', decade:'2010s', genre:'SF', hint:'「科学で問題を解決する」', film:'オデッセイ(2015)' },
+  { desc:'パンデミックが世界を覆う中、謎のウイルスの起源を追う研究者と陰謀論の拡散を描く。', decade:'2010s', genre:'ドラマ', hint:'スティーヴン・ソダーバーグ監督', film:'コンテイジョン(2011)' },
+  { desc:'日本の古い旅館で働く少女が霊的な世界に迷い込む。神々や怪物が住む世界で自分と家族を取り戻す物語。', decade:'2000s', genre:'アニメ', hint:'宮崎駿監督のアカデミー賞受賞作', film:'千と千尋の神隠し(2001)' },
+  { desc:'アメリカの貧困地区に育つ黒人少年が自己発見の旅に出る。3章構造で少年期から青年期を繊細に描く。', decade:'2010s', genre:'ドラマ', hint:'アカデミー賞最優秀作品賞受賞', film:'ムーンライト(2016)' },
+  { desc:'精神科病院に乗り込んだ反逆者が患者たちと連帯し体制に挑む。自由と管理の対立を描くヒューマンドラマ。', decade:'1970s', genre:'ドラマ', hint:'「カッコーの巣の上で」', film:'カッコーの巣の上で(1975)' },
+  { desc:'デジタル空間でのアイデンティティと記憶をめぐる哲学的SF。義体化が進んだ近未来の警察とハッカーの対決。', decade:'1990s', genre:'SF', hint:'攻殻機動隊の原型となった日本のアニメ', film:'GHOST IN THE SHELL(1995)' },
+];
+
+const HS_KEY = 'movie-quiz-hs-v1';
+const ALL_GENRES = ['すべて','SF','ドラマ','アクション','ホラー','サスペンス','アニメ'];
+
+let selectedGenre = 'すべて', questions = [], currentQ = 0, score = 0, results = [];
+let hintVisible = false;
+
+function showStart() {
+  document.getElementById('screen-start').classList.remove('hidden');
+  document.getElementById('screen-quiz').classList.add('hidden');
+  document.getElementById('screen-result').classList.add('hidden');
+  const hs = localStorage.getItem(HS_KEY);
+  document.getElementById('hs-display').textContent = hs ? '最高スコア: ' + hs + '点' : '';
+  renderGenreFilters();
+}
+
+function renderGenreFilters() {
+  const container = document.getElementById('genre-filters');
+  container.innerHTML = '';
+  ALL_GENRES.forEach(g => {
+    const btn = document.createElement('button');
+    btn.textContent = g;
+    btn.className = 'px-3 py-1 rounded-full text-sm border transition ' +
+      (g === selectedGenre ? 'bg-amber-600 border-amber-400 text-white' : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600');
+    btn.setAttribute('aria-pressed', g === selectedGenre ? 'true' : 'false');
+    btn.setAttribute('aria-label', g + 'ジャンル');
+    btn.onclick = () => { selectedGenre = g; renderGenreFilters(); };
+    container.appendChild(btn);
+  });
+}
+
+function shuffle(arr) {
+  const a = [...arr]; for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+
+function startQuiz() {
+  let pool = MOVIES.filter(m => DECADES.includes(m.decade));
+  if (selectedGenre !== 'すべて') pool = pool.filter(m => m.genre === selectedGenre);
+  if (pool.length < 10) pool = MOVIES.filter(m => DECADES.includes(m.decade));
+
+  questions = shuffle(pool).slice(0, 10);
+  currentQ = 0; score = 0; results = [];
+  document.getElementById('screen-start').classList.add('hidden');
+  document.getElementById('screen-quiz').classList.remove('hidden');
+  document.getElementById('screen-result').classList.add('hidden');
+  renderDecadeButtons();
+  renderQuestion();
+}
+
+function renderDecadeButtons() {
+  const container = document.getElementById('decade-btns');
+  container.innerHTML = '';
+  DECADES.forEach(d => {
+    const btn = document.createElement('button');
+    btn.id = 'dbtn-' + d;
+    btn.textContent = d.replace('s', "'s");
+    btn.className = 'decade-btn py-2 rounded-lg text-xs font-bold border border-gray-700 text-gray-300';
+    btn.style.background = '#1e1e2e';
+    btn.setAttribute('aria-label', d + 'と回答する');
+    btn.onclick = () => answer(d);
+    container.appendChild(btn);
+  });
+}
+
+function renderQuestion() {
+  const q = questions[currentQ];
+  document.getElementById('q-counter').textContent = (currentQ+1) + ' / 10';
+  document.getElementById('q-score').textContent = score + '点';
+  document.getElementById('q-genre').textContent = q.genre;
+  document.getElementById('q-description').textContent = q.desc;
+  document.getElementById('q-hint-box').textContent = q.hint;
+  document.getElementById('q-hint-box').classList.add('hidden');
+  hintVisible = false;
+  document.getElementById('q-hint-badge').textContent = '💡 ヒントを表示';
+  document.getElementById('feedback-box').classList.add('hidden');
+  document.getElementById('next-btn').classList.add('hidden');
+
+  DECADES.forEach(d => {
+    const btn = document.getElementById('dbtn-' + d);
+    if (btn) {
+      btn.classList.remove('correct','wrong','reveal');
+      btn.disabled = false;
+      btn.style.background = '#1e1e2e';
+    }
+  });
+
+  // Dots
+  const dots = document.getElementById('q-dots');
+  dots.innerHTML = '';
+  questions.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'flex-1 h-1.5 rounded-full ' +
+      (i < currentQ ? (results[i] ? 'bg-amber-500' : 'bg-red-700') : i === currentQ ? 'bg-white' : 'bg-gray-700');
+    dots.appendChild(dot);
+  });
+
+  document.getElementById('q-card').classList.remove('card-in'); void document.getElementById('q-card').offsetWidth; document.getElementById('q-card').classList.add('card-in');
+}
+
+function toggleHint() {
+  hintVisible = !hintVisible;
+  document.getElementById('q-hint-box').classList.toggle('hidden', !hintVisible);
+  document.getElementById('q-hint-badge').textContent = hintVisible ? '💡 ヒントを非表示' : '💡 ヒントを表示';
+}
+
+function answer(decade) {
+  const q = questions[currentQ];
+  const isCorrect = decade === q.decade;
+  if (isCorrect) score += 10;
+  results.push(isCorrect);
+
+  DECADES.forEach(d => {
+    const btn = document.getElementById('dbtn-' + d);
+    if (btn) {
+      btn.disabled = true;
+      if (d === decade && isCorrect) btn.classList.add('correct');
+      else if (d === decade && !isCorrect) btn.classList.add('wrong');
+      else if (d === q.decade) btn.classList.add('reveal');
+    }
+  });
+
+  const fb = document.getElementById('feedback-box');
+  fb.classList.remove('hidden','bg-green-900','bg-red-900');
+  fb.classList.add(isCorrect ? 'bg-green-900' : 'bg-red-900');
+  document.getElementById('fb-title').textContent = isCorrect ? '✅ 正解！ +10点' : '❌ 不正解...正解は ' + q.decade;
+  document.getElementById('fb-decade').textContent = '';
+  document.getElementById('fb-film').textContent = '作品: ' + q.film + ' ｜ ' + q.hint;
+
+  document.getElementById('next-btn').classList.remove('hidden');
+  document.getElementById('next-btn').textContent = currentQ < 9 ? '次の問題 →' : '結果を見る';
+  document.getElementById('q-score').textContent = score + '点';
+}
+
+function nextQuestion() {
+  currentQ++;
+  if (currentQ >= 10) { showResult(); return; }
+  renderQuestion();
+}
+
+function showResult() {
+  document.getElementById('screen-quiz').classList.add('hidden');
+  document.getElementById('screen-result').classList.remove('hidden');
+
+  const pct = score / 100;
+  let icon, level;
+  if (pct >= 0.9) { icon = '🏆'; level = '映画評論家マスター！'; }
+  else if (pct >= 0.7) { icon = '🎬'; level = '映画通レベル！'; }
+  else if (pct >= 0.5) { icon = '📽️'; level = '映画ファンレベル'; }
+  else if (pct >= 0.3) { icon = '🎥'; level = '映画見習いレベル'; }
+  else { icon = '🎞️'; level = '映画入門者レベル'; }
+
+  document.getElementById('r-icon').textContent = icon;
+  document.getElementById('r-level').textContent = level;
+  document.getElementById('r-score').textContent = score + '点';
+  document.getElementById('r-sub').textContent = '正解: ' + results.filter(Boolean).length + '/10問';
+
+  const bd = document.getElementById('r-breakdown');
+  bd.innerHTML = '';
+  const byDecade = {};
+  questions.forEach((q, i) => {
+    if (!byDecade[q.decade]) byDecade[q.decade] = { total:0, correct:0 };
+    byDecade[q.decade].total++;
+    if (results[i]) byDecade[q.decade].correct++;
+  });
+  Object.entries(byDecade).sort().forEach(([decade, stat]) => {
+    const row = document.createElement('div'); row.className = 'flex justify-between';
+    const lEl = document.createElement('span'); lEl.className = 'text-gray-300'; lEl.textContent = decade;
+    const vEl = document.createElement('span'); vEl.className = 'text-white font-bold'; vEl.textContent = stat.correct + '/' + stat.total;
+    row.appendChild(lEl); row.appendChild(vEl); bd.appendChild(row);
+  });
+
+  const hs = parseInt(localStorage.getItem(HS_KEY)) || 0;
+  if (score > hs) {
+    localStorage.setItem(HS_KEY, score);
+    document.getElementById('r-hs').textContent = '🎉 ハイスコア更新！';
+  } else {
+    document.getElementById('r-hs').textContent = '';
+  }
+}
+
+showStart();
+</script>
+</body>
+</html>
